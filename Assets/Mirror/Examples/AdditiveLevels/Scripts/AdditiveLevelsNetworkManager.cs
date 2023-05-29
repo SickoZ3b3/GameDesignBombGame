@@ -4,21 +4,8 @@ using UnityEngine.SceneManagement;
 
 namespace Mirror.Examples.AdditiveLevels
 {
-    [AddComponentMenu("")]
     public class AdditiveLevelsNetworkManager : NetworkManager
     {
-        public static new AdditiveLevelsNetworkManager singleton { get; private set; }
-
-        /// <summary>
-        /// Runs on both Server and Client
-        /// Networking is NOT initialized when this fires
-        /// </summary>
-        public override void Awake()
-        {
-            base.Awake();
-            singleton = this;
-        }
-
         [Header("Additive Scenes - First is start scene")]
 
         [Scene, Tooltip("Add additive scenes here.\nFirst entry will be players' start scene")]
@@ -70,7 +57,7 @@ namespace Mirror.Examples.AdditiveLevels
         /// <param name="customHandling">true to indicate that scene loading will be handled through overrides</param>
         public override void OnClientChangeScene(string sceneName, SceneOperation sceneOperation, bool customHandling)
         {
-            //Debug.Log($"{System.DateTime.Now:HH:mm:ss:fff} OnClientChangeScene {sceneName} {sceneOperation}");
+            //Debug.Log($"OnClientChangeScene {sceneName} {sceneOperation}");
 
             if (sceneOperation == SceneOperation.UnloadAdditive)
                 StartCoroutine(UnloadAdditive(sceneName));
@@ -83,8 +70,8 @@ namespace Mirror.Examples.AdditiveLevels
         {
             isInTransition = true;
 
-            // This will return immediately if already faded in
-            // e.g. by UnloadAdditive or by default startup state
+            // this will return immediately if already faded in
+            // e.g. by UnloadAdditive above or by default startup state
             yield return fadeInOut.FadeIn();
 
             // host client is on server...don't load the additive scene again
@@ -101,36 +88,27 @@ namespace Mirror.Examples.AdditiveLevels
             NetworkClient.isLoadingScene = false;
             isInTransition = false;
 
-            OnClientSceneChanged();
-
-            // Reveal the new scene content.
+            OnClientSceneChanged(NetworkClient.connection);
             yield return fadeInOut.FadeOut();
         }
 
         IEnumerator UnloadAdditive(string sceneName)
         {
             isInTransition = true;
-
-            // This will return immediately if already faded in
-            // e.g. by LoadAdditive above or by default startup state.
             yield return fadeInOut.FadeIn();
 
-            // host client is on server...don't unload the additive scene here.
             if (mode == NetworkManagerMode.ClientOnly)
             {
                 yield return SceneManager.UnloadSceneAsync(sceneName);
                 yield return Resources.UnloadUnusedAssets();
             }
 
-            // Reset these to false when ready to proceed
+            // Reset this to false when ready to proceed
             NetworkClient.isLoadingScene = false;
+
             isInTransition = false;
 
-            OnClientSceneChanged();
-
-            // There is no call to FadeOut here on purpose.
-            // Expectation is that a LoadAdditive or full scene change
-            // will follow that will call FadeOut after that scene loads.
+            OnClientSceneChanged(NetworkClient.connection);
         }
 
         /// <summary>
@@ -138,13 +116,15 @@ namespace Mirror.Examples.AdditiveLevels
         /// <para>Scene changes can cause player objects to be destroyed. The default implementation of OnClientSceneChanged in the NetworkManager is to add a player object for the connection if no player object exists.</para>
         /// </summary>
         /// <param name="conn">The network connection that the scene change message arrived on.</param>
-        public override void OnClientSceneChanged()
+        public override void OnClientSceneChanged(NetworkConnection conn)
         {
+            //Debug.Log($"OnClientSceneChanged {isInTransition}");
+
             // Only call the base method if not in a transition.
             // This will be called from DoTransition after setting doingTransition to false
             // but will also be called first by Mirror when the scene loading finishes.
             if (!isInTransition)
-                base.OnClientSceneChanged();
+                base.OnClientSceneChanged(conn);
         }
 
         #endregion
@@ -156,8 +136,10 @@ namespace Mirror.Examples.AdditiveLevels
         /// <para>The default implementation of this function calls NetworkServer.SetClientReady() to continue the network setup process.</para>
         /// </summary>
         /// <param name="conn">Connection from client.</param>
-        public override void OnServerReady(NetworkConnectionToClient conn)
+        public override void OnServerReady(NetworkConnection conn)
         {
+            //Debug.Log($"OnServerReady {conn} {conn.identity}");
+
             // This fires from a Ready message client sends to server after loading the online scene
             base.OnServerReady(conn);
 
@@ -167,7 +149,7 @@ namespace Mirror.Examples.AdditiveLevels
 
         // This delay is mostly for the host player that loads too fast for the
         // server to have subscenes async loaded from OnServerSceneChanged ahead of it.
-        IEnumerator AddPlayerDelayed(NetworkConnectionToClient conn)
+        IEnumerator AddPlayerDelayed(NetworkConnection conn)
         {
             // Wait for server to async load all subscenes for game instances
             while (!subscenesLoaded)

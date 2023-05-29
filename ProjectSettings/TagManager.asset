@@ -8,6 +8,7 @@ TagManager:
   - Bomb
   - Hand
   - FxTemporaire
+  - Item
   layers:
   - Default
   - TransparentFX

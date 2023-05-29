@@ -1,5 +1,9 @@
-﻿using System.Collections;
-using UnityEngine;
+﻿using UnityEngine;
+
+/*
+	Documentation: https://mirror-networking.gitbook.io/docs/components/network-manager
+	API Reference: https://mirror-networking.com/docs/api/Mirror.NetworkManager.html
+*/
 
 namespace Mirror.Examples.MultipleMatch
 {
@@ -10,7 +14,7 @@ namespace Mirror.Examples.MultipleMatch
         public GameObject canvas;
         public CanvasController canvasController;
 
-        public static new MatchNetworkManager singleton { get; private set; }
+        #region Unity Callbacks
 
         /// <summary>
         /// Runs on both Server and Client
@@ -19,9 +23,10 @@ namespace Mirror.Examples.MultipleMatch
         public override void Awake()
         {
             base.Awake();
-            singleton = this;
             canvasController.InitializeData();
         }
+
+        #endregion
 
         #region Server System Callbacks
 
@@ -30,7 +35,7 @@ namespace Mirror.Examples.MultipleMatch
         /// <para>The default implementation of this function calls NetworkServer.SetClientReady() to continue the network setup process.</para>
         /// </summary>
         /// <param name="conn">Connection from client.</param>
-        public override void OnServerReady(NetworkConnectionToClient conn)
+        public override void OnServerReady(NetworkConnection conn)
         {
             base.OnServerReady(conn);
             canvasController.OnServerReady(conn);
@@ -41,14 +46,9 @@ namespace Mirror.Examples.MultipleMatch
         /// <para>This is called on the Server when a Client disconnects from the Server. Use an override to decide what should happen when a disconnection is detected.</para>
         /// </summary>
         /// <param name="conn">Connection from client.</param>
-        public override void OnServerDisconnect(NetworkConnectionToClient conn)
+        public override void OnServerDisconnect(NetworkConnection conn)
         {
-            StartCoroutine(DoServerDisconnect(conn));
-        }
-
-        IEnumerator DoServerDisconnect(NetworkConnectionToClient conn)
-        {
-            yield return canvasController.OnServerDisconnect(conn);
+            canvasController.OnServerDisconnect(conn);
             base.OnServerDisconnect(conn);
         }
 
@@ -60,20 +60,22 @@ namespace Mirror.Examples.MultipleMatch
         /// Called on the client when connected to a server.
         /// <para>The default implementation of this function sets the client as ready and adds a player. Override the function to dictate what happens when the client connects.</para>
         /// </summary>
-        public override void OnClientConnect()
+        /// <param name="conn">Connection to the server.</param>
+        public override void OnClientConnect(NetworkConnection conn)
         {
-            base.OnClientConnect();
-            canvasController.OnClientConnect();
+            base.OnClientConnect(conn);
+            canvasController.OnClientConnect(conn);
         }
 
         /// <summary>
         /// Called on clients when disconnected from a server.
         /// <para>This is called on the client when it disconnects from the server. Override this function to decide what happens when the client disconnects.</para>
         /// </summary>
-        public override void OnClientDisconnect()
+        /// <param name="conn">Connection to the server.</param>
+        public override void OnClientDisconnect(NetworkConnection conn)
         {
             canvasController.OnClientDisconnect();
-            base.OnClientDisconnect();
+            base.OnClientDisconnect(conn);
         }
 
         #endregion
@@ -86,7 +88,7 @@ namespace Mirror.Examples.MultipleMatch
         /// </summary>
         public override void OnStartServer()
         {
-            if (mode == NetworkManagerMode.ServerOnly)
+            if (mode == NetworkManagerMode.ServerOnly) 
                 canvas.SetActive(true);
 
             canvasController.OnStartServer();

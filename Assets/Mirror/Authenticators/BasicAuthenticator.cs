@@ -1,11 +1,11 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace Mirror.Authenticators
 {
-    [AddComponentMenu("Network/ Authenticators/Basic Authenticator")]
-    [HelpURL("https://mirror-networking.gitbook.io/docs/components/network-authenticators/basic-authenticator")]
+    [AddComponentMenu("Network/Authenticators/BasicAuthenticator")]
     public class BasicAuthenticator : NetworkAuthenticator
     {
         [Header("Server Credentials")]
@@ -50,7 +50,7 @@ namespace Mirror.Authenticators
 
         /// <summary>
         /// Called on server from StopServer to reset the Authenticator
-        /// <para>Server message handlers should be unregistered in this method.</para>
+        /// <para>Server message handlers should be registered in this method.</para>
         /// </summary>
         public override void OnStopServer()
         {
@@ -59,10 +59,10 @@ namespace Mirror.Authenticators
         }
 
         /// <summary>
-        /// Called on server from OnServerConnectInternal when a client needs to authenticate
+        /// Called on server from OnServerAuthenticateInternal when a client needs to authenticate
         /// </summary>
         /// <param name="conn">Connection to client.</param>
-        public override void OnServerAuthenticate(NetworkConnectionToClient conn)
+        public override void OnServerAuthenticate(NetworkConnection conn)
         {
             // do nothing...wait for AuthRequestMessage from client
         }
@@ -72,9 +72,9 @@ namespace Mirror.Authenticators
         /// </summary>
         /// <param name="conn">Connection to client.</param>
         /// <param name="msg">The message payload</param>
-        public void OnAuthRequestMessage(NetworkConnectionToClient conn, AuthRequestMessage msg)
+        public void OnAuthRequestMessage(NetworkConnection conn, AuthRequestMessage msg)
         {
-            //Debug.Log($"Authentication Request: {msg.authUsername} {msg.authPassword}");
+            // Debug.LogFormat(LogType.Log, "Authentication Request: {0} {1}", msg.authUsername, msg.authPassword);
 
             if (connectionsPendingDisconnect.Contains(conn)) return;
 
@@ -110,11 +110,11 @@ namespace Mirror.Authenticators
                 conn.isAuthenticated = false;
 
                 // disconnect the client after 1 second so that response message gets delivered
-                StartCoroutine(DelayedDisconnect(conn, 1f));
+                StartCoroutine(DelayedDisconnect(conn, 1));
             }
         }
 
-        IEnumerator DelayedDisconnect(NetworkConnectionToClient conn, float waitTime)
+        IEnumerator DelayedDisconnect(NetworkConnection conn, float waitTime)
         {
             yield return new WaitForSeconds(waitTime);
 
@@ -138,7 +138,7 @@ namespace Mirror.Authenticators
         public override void OnStartClient()
         {
             // register a handler for the authentication response we expect from server
-            NetworkClient.RegisterHandler<AuthResponseMessage>(OnAuthResponseMessage, false);
+            NetworkClient.RegisterHandler<AuthResponseMessage>((Action<AuthResponseMessage>)OnAuthResponseMessage, false);
         }
 
         /// <summary>
@@ -152,7 +152,7 @@ namespace Mirror.Authenticators
         }
 
         /// <summary>
-        /// Called on client from OnClientConnectInternal when a client needs to authenticate
+        /// Called on client from OnClientAuthenticateInternal when a client needs to authenticate
         /// </summary>
         public override void OnClientAuthenticate()
         {
@@ -162,7 +162,7 @@ namespace Mirror.Authenticators
                 authPassword = password
             };
 
-            NetworkClient.Send(authRequestMessage);
+            NetworkClient.connection.Send(authRequestMessage);
         }
 
         /// <summary>
@@ -173,7 +173,7 @@ namespace Mirror.Authenticators
         {
             if (msg.code == 100)
             {
-                //Debug.Log($"Authentication Response: {msg.message}");
+                // Debug.LogFormat(LogType.Log, "Authentication Response: {0}", msg.message);
 
                 // Authentication has been accepted
                 ClientAccept();

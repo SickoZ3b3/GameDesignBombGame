@@ -27,18 +27,6 @@ namespace Mirror.Examples.MultipleAdditiveScenes
         // Sequential index used in round-robin deployment of players into instances and score positioning
         int clientIndex;
 
-        public static new MultiSceneNetManager singleton { get; private set; }
-
-        /// <summary>
-        /// Runs on both Server and Client
-        /// Networking is NOT initialized when this fires
-        /// </summary>
-        public override void Awake()
-        {
-            base.Awake();
-            singleton = this;
-        }
-
         #region Server System Callbacks
 
         /// <summary>
@@ -46,14 +34,14 @@ namespace Mirror.Examples.MultipleAdditiveScenes
         /// <para>The default implementation for this function creates a new player object from the playerPrefab.</para>
         /// </summary>
         /// <param name="conn">Connection from client.</param>
-        public override void OnServerAddPlayer(NetworkConnectionToClient conn)
+        public override void OnServerAddPlayer(NetworkConnection conn)
         {
             StartCoroutine(OnServerAddPlayerDelayed(conn));
         }
 
         // This delay is mostly for the host player that loads too fast for the
         // server to have subscenes async loaded from OnStartServer ahead of it.
-        IEnumerator OnServerAddPlayerDelayed(NetworkConnectionToClient conn)
+        IEnumerator OnServerAddPlayerDelayed(NetworkConnection conn)
         {
             // wait for server to async load all subscenes for game instances
             while (!subscenesLoaded)
@@ -72,13 +60,13 @@ namespace Mirror.Examples.MultipleAdditiveScenes
             playerScore.scoreIndex = clientIndex / subScenes.Count;
             playerScore.matchIndex = clientIndex % subScenes.Count;
 
+            clientIndex++;
+
             // Do this only on server, not on clients
             // This is what allows the NetworkSceneChecker on player and scene objects
             // to isolate matches per scene instance on server.
             if (subScenes.Count > 0)
                 SceneManager.MoveGameObjectToScene(conn.identity.gameObject, subScenes[clientIndex % subScenes.Count]);
-
-            clientIndex++;
         }
 
         #endregion
@@ -125,8 +113,7 @@ namespace Mirror.Examples.MultipleAdditiveScenes
         IEnumerator ServerUnloadSubScenes()
         {
             for (int index = 0; index < subScenes.Count; index++)
-                if (subScenes[index].IsValid())
-                    yield return SceneManager.UnloadSceneAsync(subScenes[index]);
+                yield return SceneManager.UnloadSceneAsync(subScenes[index]);
 
             subScenes.Clear();
             subscenesLoaded = false;
@@ -139,8 +126,8 @@ namespace Mirror.Examples.MultipleAdditiveScenes
         /// </summary>
         public override void OnStopClient()
         {
-            // Make sure we're not in ServerOnly mode now after stopping host client
-            if (mode == NetworkManagerMode.Offline)
+            // make sure we're not in host mode
+            if (mode == NetworkManagerMode.ClientOnly)
                 StartCoroutine(ClientUnloadSubScenes());
         }
 
@@ -148,8 +135,10 @@ namespace Mirror.Examples.MultipleAdditiveScenes
         IEnumerator ClientUnloadSubScenes()
         {
             for (int index = 0; index < SceneManager.sceneCount; index++)
+            {
                 if (SceneManager.GetSceneAt(index) != SceneManager.GetActiveScene())
                     yield return SceneManager.UnloadSceneAsync(SceneManager.GetSceneAt(index));
+            }
         }
 
         #endregion

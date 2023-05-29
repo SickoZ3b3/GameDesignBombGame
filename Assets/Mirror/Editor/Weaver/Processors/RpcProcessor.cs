@@ -8,10 +8,10 @@ namespace Mirror.Weaver
     {
         public static MethodDefinition ProcessRpcInvoke(WeaverTypes weaverTypes, Writers writers, Readers readers, Logger Log, TypeDefinition td, MethodDefinition md, MethodDefinition rpcCallFunc, ref bool WeavingFailed)
         {
-            string rpcName = Weaver.GenerateMethodName(Weaver.InvokeRpcPrefix, md);
-
-            MethodDefinition rpc = new MethodDefinition(rpcName, MethodAttributes.Family | MethodAttributes.Static | MethodAttributes.HideBySig,
-                                                        weaverTypes.Import(typeof(void)));
+            MethodDefinition rpc = new MethodDefinition(
+                Weaver.InvokeRpcPrefix + md.Name,
+                MethodAttributes.Family | MethodAttributes.Static | MethodAttributes.HideBySig,
+                weaverTypes.Import(typeof(void)));
 
             ILProcessor worker = rpc.Body.GetILProcessor();
             Instruction label = worker.Create(OpCodes.Nop);
@@ -68,25 +68,23 @@ namespace Mirror.Weaver
             //worker.Emit(OpCodes.Ldstr, $"Call ClientRpc function {md.Name}");
             //worker.Emit(OpCodes.Call, WeaverTypes.logErrorReference);
 
-            NetworkBehaviourProcessor.WriteGetWriter(worker, weaverTypes);
+            NetworkBehaviourProcessor.WriteCreateWriter(worker, weaverTypes);
 
             // write all the arguments that the user passed to the Rpc call
             if (!NetworkBehaviourProcessor.WriteArguments(worker, writers, Log, md, RemoteCallType.ClientRpc, ref WeavingFailed))
                 return null;
 
+            string rpcName = md.Name;
             int channel = clientRpcAttr.GetField("channel", 0);
             bool includeOwner = clientRpcAttr.GetField("includeOwner", true);
 
             // invoke SendInternal and return
             // this
             worker.Emit(OpCodes.Ldarg_0);
-            // pass full function name to avoid ClassA.Func <-> ClassB.Func collisions
-            worker.Emit(OpCodes.Ldstr, md.FullName);
-            // pass the function hash so we don't have to compute it at runtime
-            // otherwise each GetStableHash call requires O(N) complexity.
-            // noticeable for long function names: 
-            // https://github.com/MirrorNetworking/Mirror/issues/3375
-            worker.Emit(OpCodes.Ldc_I4, md.FullName.GetStableHashCode());
+            worker.Emit(OpCodes.Ldtoken, td);
+            // invokerClass
+            worker.Emit(OpCodes.Call, weaverTypes.getTypeFromHandleReference);
+            worker.Emit(OpCodes.Ldstr, rpcName);
             // writer
             worker.Emit(OpCodes.Ldloc_0);
             worker.Emit(OpCodes.Ldc_I4, channel);
@@ -94,7 +92,7 @@ namespace Mirror.Weaver
             worker.Emit(includeOwner ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
             worker.Emit(OpCodes.Callvirt, weaverTypes.sendRpcInternal);
 
-            NetworkBehaviourProcessor.WriteReturnWriter(worker, weaverTypes);
+            NetworkBehaviourProcessor.WriteRecycleWriter(worker, weaverTypes);
 
             worker.Emit(OpCodes.Ret);
 
